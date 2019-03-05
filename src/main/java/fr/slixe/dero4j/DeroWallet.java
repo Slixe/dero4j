@@ -11,10 +11,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.security.SecureRandom;
+import java.util.*;
+
+import static fr.slixe.dero4j.util.Helper.asUint64;
+import static fr.slixe.dero4j.util.Helper.json;
 
 public class DeroWallet implements IWallet
 {
@@ -31,25 +32,13 @@ public class DeroWallet implements IWallet
 		this.password = password;
 	}
 
-	private JSONObject json(String method)
-	{
-		return json(method, null);
-	}
-
-	private JSONObject json(String method, Map<String, Object> params)
-	{
-		JSONObject json = new JSONObject().put("jsonrpc", "2.0").put("id", "1").put("method", method);
-		if (params != null) json.put("params", params);
-		return json;
-	}
-
-	private JSONObject request(JSONObject json) throws WalletException
+	private JSONObject request(JSONObject json) throws RequestException
 	{
 		HttpResponse<JsonNode> req;
 		try {
 			req = Unirest.post(host).basicAuth(username, password).header("Content-Type", "application/json").body(json).asJson();
 		} catch (UnirestException e) {
-			throw new WalletException("Wallet is offline?");
+			throw new RequestException("Wallet is offline?");
 		}
 		System.out.println("Headers:" + req.getHeaders().toString());
 		System.out.println("Request: " + json.toString());
@@ -57,34 +46,34 @@ public class DeroWallet implements IWallet
 
 		JSONObject response = req.getBody().getObject();
 		if (!response.has("result")) {
-			throw new WalletException(response.getString("error"));
+			throw new RequestException(response.getString("error"));
 		}
 		return response.getJSONObject("result");
 	}
 
 	@Override
-	public String generateAddress(String id) throws WalletException
+	public String generateAddress(String id) throws RequestException
 	{
 		JSONObject json = request(json("make_integrated_address", new MapBuilder<String, Object>().put("payment_id", id).get()));
 		return json.getString("integrated_address"); //make_integrated_address
 	}
 
 	@Override
-	public String getPaymentIdFromAddress(String address) throws WalletException
+	public String getPaymentIdFromAddress(String address) throws RequestException
 	{
 		JSONObject json = request(json("split_integrated_address", new MapBuilder<String, Object>().put("integrated_address", address).get()));
 		return json.getString("payment_id"); //split_integrated_address
 	}
 
 	@Override
-	public String sendTo(String address, BigDecimal amount) throws WalletException
+	public String sendTo(String address, BigDecimal amount) throws RequestException
 	{
 		JSONObject json = request(json("transfer", new MapBuilder<String, Object>().put("address", address).put("amount", Helper.asUint64(amount, SCALE)).get()));
 		return json.getString("tx_hash");
 	}
 
 	@Override
-	public List<Tx> getTransactions(String id, int minHeight) throws WalletException
+	public List<Tx> getTransactions(String id, int minHeight) throws RequestException
 	{
 		List<Tx> list = new ArrayList<>();
 		JSONObject json = request(json("get_bulk_payments", new MapBuilder<String, Object>().put("payment_ids", new String[]{id}).get()));
@@ -104,14 +93,33 @@ public class DeroWallet implements IWallet
 	}
 
 	@Override
-	public String getPrimaryAddress() throws WalletException
+	public String getPrimaryAddress() throws RequestException
 	{
 		return request(json("getaddress")).getString("address"); //getaddress
 	}
 
 	@Override
-	public int getHeight() throws WalletException
+	public int getHeight() throws RequestException
 	{
 		return request(json("getheight")).getInt("height"); //getheight
+	}
+
+	@Override
+	public String sendToSC(String scid, String entrypoint, Map<String, Object> scParams, BigDecimal amount) throws RequestException
+	{
+		LinkedHashMap<String, Object> params = new MapBuilder<String, Object>().put("scid", scid).put("entrypoint", entrypoint).put("get_tx_key", true).put("value", asUint64(amount, 12)).get();
+		if (scParams != null)
+			params.putAll(scParams);
+		return request(json("transfer_split", params)).toString(); //TODO
+	}
+
+	@Override
+	public String paymentId()
+	{
+		StringBuilder builder = new StringBuilder(32);
+		SecureRandom rnd = new SecureRandom();
+		while (builder.length() < 32)
+			builder.append(Integer.toHexString(rnd.nextInt()));
+		return builder.substring(0, 32);
 	}
 }
