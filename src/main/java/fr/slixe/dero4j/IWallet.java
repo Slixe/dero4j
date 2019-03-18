@@ -27,7 +27,15 @@ public interface IWallet
 	 * @return
 	 * @throws RequestException
 	 */
-	String sendTo(String address, BigDecimal amount) throws RequestException;
+	String transfer(String address, BigDecimal amount) throws RequestException;
+	/**
+	 * @param address is the receiver address
+	 * @param amount amount to sent
+	 * @return
+	 * @throws RequestException
+	 */
+	String transferSplit(String address, BigDecimal amount) throws RequestException;
+
 	/**
 	 * @param paymentId
 	 * @param minHeight minimum height to start to count transactions
@@ -59,4 +67,25 @@ public interface IWallet
 	 * @return a new generated paymentId
 	 */
 	String paymentId();
+	/**
+	 * The transaction is validated if it exists and it is confirmed up to 20 block minimum
+	 * @param txHash
+	 * @return txHash is valid or not
+	 */
+	boolean isValidTx(String txHash) throws RequestException;
+
+	/**
+	 * Recover the transaction using tx hash
+	 * @param txHash
+	 * @return the transaction
+	 */
+	Tx.InPayment getTransferByHash(String txHash) throws RequestException;
+
+	/**
+	 * 	Estimate fee before sending DERO
+	 * @param address receiver
+	 * @param amount to send
+	 * @return estimated fee for this tx
+	 */
+	BigDecimal estimateFee(String address, BigDecimal amount) throws RequestException;
 }

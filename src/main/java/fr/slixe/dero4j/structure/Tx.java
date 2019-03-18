@@ -54,6 +54,23 @@ public class Tx
 		}
 	}
 
+	public static class InPayment extends Tx {
+
+		private String paymentId;
+
+		public InPayment(int blockHeight, String txHash, BigDecimal amount, byte unlockTime, String paymentId)
+		{
+			super(blockHeight, txHash, amount, unlockTime);
+
+			this.paymentId = paymentId;
+		}
+
+		public String getPaymentId()
+		{
+			return this.paymentId;
+		}
+	}
+
 	public static class Out extends Tx {
 
 		private String toAddress;

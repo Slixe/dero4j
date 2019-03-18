@@ -40,10 +40,6 @@ public class DeroWallet implements IWallet
 		} catch (UnirestException e) {
 			throw new RequestException("Wallet is offline?");
 		}
-		System.out.println("Headers:" + req.getHeaders().toString());
-		System.out.println("Request: " + json.toString());
-		System.out.println("Response: " + req.getBody());
-
 		JSONObject response = req.getBody().getObject();
 		if (!response.has("result")) {
 			throw new RequestException(response.getString("error"));
@@ -66,17 +62,25 @@ public class DeroWallet implements IWallet
 	}
 
 	@Override
-	public String sendTo(String address, BigDecimal amount) throws RequestException
+	public String transfer(String address, BigDecimal amount) throws RequestException
 	{
 		JSONObject json = request(json("transfer", new MapBuilder<String, Object>().put("address", address).put("amount", Helper.asUint64(amount, SCALE)).get()));
 		return json.getString("tx_hash");
 	}
 
 	@Override
+	public String transferSplit(String address, BigDecimal amount) throws RequestException
+	{
+		throw new RequestException("Not implemented yet");
+		//JSONObject json = request(json("transfer_split", new MapBuilder<String, Object>().put("address", address).put("amount", Helper.asUint64(amount, SCALE)).get()));
+		//return json.getString("tx_hash");
+	}
+
+	@Override
 	public List<Tx> getTransactions(String id, int minHeight) throws RequestException
 	{
 		List<Tx> list = new ArrayList<>();
-		JSONObject json = request(json("get_bulk_payments", new MapBuilder<String, Object>().put("payment_ids", new String[]{id}).get()));
+		JSONObject json = request(json("get_bulk_payments", new MapBuilder<String, Object>().put("min_block_height", minHeight).put("payment_ids", new String[]{id}).get()));
 		if (!json.has("payments")) return list;
 
 		JSONArray array = json.getJSONArray("payments");
@@ -121,5 +125,30 @@ public class DeroWallet implements IWallet
 		while (builder.length() < 32)
 			builder.append(Integer.toHexString(rnd.nextInt()));
 		return builder.substring(0, 32);
+	}
+
+	@Override
+	public boolean isValidTx(String txHash) throws RequestException
+	{
+		Tx.InPayment tx = getTransferByHash(txHash);
+		return tx != null && (tx.getBlockHeight() + 20) <= getHeight();
+	}
+
+	@Override
+	public Tx.InPayment getTransferByHash(String txHash) throws RequestException
+	{
+		JSONObject json = request(json("get_transfer_by_txid", new MapBuilder<String, Object>().put("txid", txHash).get()));
+		if (!json.has("payments")) {
+			return null;
+		}
+		JSONObject result = json.getJSONObject("payments");
+		return new Tx.InPayment(result.getInt("block_height"), result.getString("tx_hash"), Helper.toBigDecimal(result.getBigInteger("amount"), SCALE), (byte) json.getInt("unlock_time"), json.getString("payment_id"));
+	}
+
+	@Override
+	public BigDecimal estimateFee(String address, BigDecimal amount) throws RequestException
+	{
+		JSONObject json = request(json("transfer", new MapBuilder<String, Object>().put("do_not_relay", true).put("address", address).put("amount", Helper.asUint64(amount, SCALE)).get()));
+		return Helper.toBigDecimal(json.getBigInteger("fee"), SCALE);
 	}
 }
